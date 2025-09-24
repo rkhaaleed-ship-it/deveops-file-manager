@@ -1,264 +1,50 @@
-#!/bin/bash
-
-log_file="devo.log"
-report_dir="reports"
-backup_dir="backup"
-mkdir -p "$report_dir" "$backup_dir"
-
-log(){ #login memory
-    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
-    echo "$message" >> "$log_file"
-}
-
-display_header(){    #display header
-    clear 
-    echo "-------------------------"
-    echo "  DevOps project "
-    echo "--------------------------"	
-}
-
-pause(){ 
-    read -p "Press Enter to continue...."
-}
-
-create_new(){    
-    read -p "Enter the name of file or directory to Create: " name
-    if [ -z "$name" ]; then 
-        echo "Error: name can't be empty"
-        return 
-    fi
-    if [ -e "$name" ]; then 
-        echo "Error: $name already exists"
-        return 
-    fi
-
-    read -p "Is it File or directory (f/d)?: " type
-    
-    case "$type" in 
-        f) touch "$name" && echo "File created: $name" && log "created file $name";;
-        d) mkdir -p "$name" && echo "Directory created: $name" && log "created dir $name" ;;
-        *) echo "Invalid choice"
-    esac
-}
-
-copy_it(){  
-    read -p "Source path for file or directory: " src
-    read -p "Destination path for file or directory: " dst 
-    if [[ -e "$src" ]]; then
-        read -p "Are you sure to copy $src to $dst? (y/n): " ans
-        if [[ "$ans" == "y" ]]; then
-            cp -r "$src" "$dst" && echo "Copied $src to $dst"
-            log "copy $src to $dst"
-        else
-            echo "Canceled"
-        fi
-    else 
-        echo "Source file or directory does not exist"
-    fi
-}
-
-move_it(){ 
-    read -p "What is the source path for move: " msrc
-    read -p "What is the destination path for move: " mdst
-    if [[ -e "$msrc" ]]; then
-        read -p "Are you sure to move $msrc to $mdst? (y/n): " ans
-        if [[ "$ans" == "y" ]]; then
-            mv -v "$msrc" "$mdst" && echo "Moved $msrc to $mdst"
-            log "moved $msrc to $mdst"
-        else 
-            echo "Canceled"
-        fi
-    else
-        echo "Source file does not exist" 
-    fi
-}
-
-rename_it(){
-    read -rp "Enter current name: " old_name
-    read -rp "Enter new name: " new_name
-    if [[ -e "$old_name" ]]; then 
-        read -p "Are you sure to rename $old_name to $new_name? (y/n): " ans
-        if [[ "$ans" == "y" ]]; then
-            mv "$old_name" "$new_name" && echo "Renamed $old_name to $new_name"
-            log "rename $old_name to $new_name"
-        else 
-            echo "Canceled"
-        fi
-    else
-        echo "File or directory not found"
-    fi 
-}
-
-delete_it(){ 
-    read -rp "Enter file name you want to delete: " d_name
-    if [[ -e "$d_name" ]]; then
-        read -p "Are you sure to delete $d_name? (y/n): " ans
-        if [[ "$ans" == "y" ]]; then
-            rm -r -i "$d_name" && echo "File $d_name Deleted"
-            log "Deleted $d_name"
-        else 
-            echo "Canceled"
-        fi
-    else
-        echo "File or directory not found"
-    fi 
-}
-
-list_dir(){
-    read -rp "Enter the name of the Directory to list: " dir_name
-    dir_name=${dir_name:-"."}
-    if [[ -d "$dir_name" ]]; then
-        ls -lah "$dir_name"
-    else 
-        echo "Error: directory not found"
-    fi
-}
-
-search_file(){
-    echo "Search: "
-    read -p "Name: " Pattern
-    read -p "Type (file=f, dir=d): " Type
-    read -p "Size: " Size
-    read -p "Modified in last N days: " Days
-    cmd=(find .)
-    [[ -n "$Pattern" ]] && cmd+=(-name "$Pattern")
-    [[ "$Type" == "f" ]] && cmd+=(-type f)
-    [[ "$Type" == "d" ]] && cmd+=(-type d)
-    [[ -n "$Size" ]] && cmd+=(-size "$Size")
-    [[ -n "$Days" ]] && cmd+=(-mtime "$Days")
-    echo "Search command: ${cmd[*]}"
-    "${cmd[@]}"
-}
-
-change_permission(){
-    read -p "Enter file or directory name: " p
-    read -p "Enter chmod permission: " mode
-    chmod "$mode" "$p" && echo "Permission changed"
-    log "changed permission $p to $mode"
-}
-
-change_owner(){
-    read -p "Enter file or directory name: " g
-    read -p "Enter new owner name: " owner
-    chown "$owner" "$g" && echo "Owner changed"
-    log "changed owner $g to $owner"
-}
-
-backup_it(){
-    read -p "Enter file or directory name: " b
-    if [[ -e "$b" ]]; then
-        ts=$(date +%Y%m%d_%H%M%S)
-        tar -czf "backup_${ts}.tar.gz" "$b"
-        echo "Backup created: backup_${ts}.tar.gz"
-        log "Backup created for $b"
-    else
-        echo "File or directory not found"
-    fi
-}
-
-restore_backup(){
-    read -p "Enter backup name you want to restore (.tar.gz): " R
-    if [[ -f "$R" ]]; then 
-        tar -xzf "$R"
-        echo "Backup restored."
-        log "restored backup $R"
-    else
-        echo "Backup file not found"
-    fi
-}
-
-system_info(){
-    echo "OS: $(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"')"
-    echo "Kernel: $(uname -r)"
-    echo "Hostname: $(hostname)"
-    echo "Uptime: $(uptime -p)"
-    echo "Date: $(date)"
-    echo ""
-}
-
-cpu_info(){
-    echo "CPU usage: "
-    top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4 "%"}'
-    echo ""
-}
-
-memory_usage(){
-    echo "Memory usage: "
-    free -h
-    echo ""
-}
-
-disk_usage(){
-    echo "Disk usage: "
-    df -h
-    echo ""
-}
-
-generate_report(){
-    local ts=$(date +%Y%m%d_%H%M%S)
-    local report_file="$report_dir/system_report_${ts}.txt"
-
-    {
-        system_info
-        echo ""
-        cpu_info
-        echo ""
-        memory_usage
-        echo ""
-        disk_usage
-        echo ""
-    } > "$report_file"
-
-    echo "Report saved in $report_file"
-    log "Generate report file $report_file"
-}
-
-main_menu(){ #the menu to choose
-    while true; do 
-        echo "=== DevOps Tool Menu ==="
-        echo "1- Create file or Directory"
-        echo "2- Copy file or Directory"
-        echo "3- Move file or Directory"
-        echo "4- Rename file or Directory"
-        echo "5- Delete file or Directory"
-        echo "6- List Directory"
-        echo "7- Search"
-        echo "8- Change permission"
-        echo "9- Change owner"
-        echo "10- Backup"
-        echo "11- Restore Backup"
-        echo "12- System information"
-        echo "13- CPU usage"
-        echo "14- Memory usage"
-        echo "15- Disk Usage"
-        echo "16- Make report"
-        echo "17- Exit"
-        read -rp "Enter your choice: " ch
-
-        case "$ch" in 
-            1) create_new ;;
-            2) copy_it ;;
-            3) move_it ;;
-            4) rename_it ;;
-            5) delete_it ;;
-            6) list_dir ;;
-            7) search_file ;;
-            8) change_permission ;;
-            9) change_owner ;;
-            10) backup_it ;;
-            11) restore_backup ;;
-            12) system_info ;;
-            13) cpu_info ;;
-            14) memory_usage ;;
-            15) disk_usage ;;
-            16) generate_report ;;
-            17) echo "Goodbye!"; break ;;
-            *) echo "Invalid choice, try again:" ;;
-        esac
-        echo
-        pause
-    done
-}
-
-log "Tool started"
-main_menu
+-----BEGIN OPENSSH PRIVATE KEY-----
+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
+7CBXiceIX7v/ETRhizRc54hkw=
+-----END OPENSSH PRIVATE KEY-----
